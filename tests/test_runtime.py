@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QMimeData, Qt, QUrl
 from PySide6.QtGui import QColor, QImage, QKeyEvent
-from PySide6.QtWidgets import QApplication, QGraphicsView
+from PySide6.QtWidgets import QApplication, QGraphicsView, QSystemTrayIcon
 
 from clipboard_plus.application import ClipboardController
 from clipboard_plus.database import HistoryDatabase
@@ -221,6 +221,30 @@ class RuntimeTests(unittest.TestCase):
         self.controller.window.pin_window.setChecked(True)
         self.assertTrue(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
 
+    def test_tray_click_hides_only_when_window_is_foreground(self):
+        self.controller.window.show()
+        with patch.object(self.controller.window, "is_foreground", return_value=True), \
+                patch.object(self.controller.window, "hide") as hide, \
+                patch.object(self.controller, "show_window") as show_window:
+            self.controller._tray_activated(QSystemTrayIcon.Trigger)
+            hide.assert_called_once_with()
+            show_window.assert_not_called()
+
+    def test_tray_click_restores_when_hidden_minimized_or_obscured(self):
+        with patch.object(self.controller.window, "is_foreground", return_value=False), \
+                patch.object(self.controller, "show_window") as show_window:
+            self.controller._tray_activated(QSystemTrayIcon.Trigger)
+            show_window.assert_called_once_with()
+
+    def test_alt_v_show_path_never_toggles_window(self):
+        with patch.object(self.controller, "refresh") as refresh, \
+                patch.object(self.controller.window, "show_and_activate") as activate, \
+                patch.object(self.controller.window, "hide") as hide:
+            self.controller.show_window()
+            refresh.assert_called_once_with()
+            activate.assert_called_once_with()
+            hide.assert_not_called()
+
     def test_escape_hides_window(self):
         self.controller.window.show()
         event = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
@@ -261,6 +285,37 @@ class RuntimeTests(unittest.TestCase):
         row = self.database.list_history()[0]
         self.assertEqual(row.note, "")
         self.assertTrue(row.is_favorite)
+
+    def test_note_and_text_can_be_copied_without_creating_history(self):
+        record_id = self.database.add_or_touch("正文内容")
+        self.database.set_note(record_id, "重要备注")
+
+        self.controller.handle_action("copy_note", record_id, "text")
+        self.app.processEvents()
+        self.assertEqual(self.controller.clipboard.text(), "重要备注")
+        self.assertEqual(self.database.count("text"), 1)
+
+        self.controller.handle_action("copy_note_with_content", record_id, "text")
+        self.app.processEvents()
+        self.assertEqual(self.controller.clipboard.text(), "正文内容\n\n备注：重要备注")
+        self.assertEqual(self.database.count("text"), 1)
+
+    def test_note_and_image_can_be_copied_as_one_mime_payload(self):
+        from clipboard_plus.application import _image_png
+
+        image = QImage(40, 30, QImage.Format_ARGB32)
+        image.fill(QColor("magenta"))
+        image_data = _image_png(image)
+        record_id = self.database.add_or_touch_image(image_data, image_data)
+        self.database.set_note(record_id, "图片备注", "image")
+
+        self.controller.handle_action("copy_note_with_content", record_id, "image")
+        self.app.processEvents()
+        mime = self.controller.clipboard.mimeData()
+        self.assertTrue(mime.hasText())
+        self.assertEqual(mime.text(), "图片备注")
+        self.assertTrue(mime.hasImage())
+        self.assertEqual(self.database.count("image"), 1)
 
 
 if __name__ == "__main__":

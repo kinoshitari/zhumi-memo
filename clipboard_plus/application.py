@@ -243,6 +243,17 @@ class ClipboardController(QObject):
             self._ignore_next_clipboard_change()
             self.clipboard.setImage(image)
 
+    def _set_image_with_note_clipboard(self, image_data: bytes, note: str) -> bool:
+        image = QImage()
+        if not note or not image.loadFromData(image_data):
+            return False
+        mime = QMimeData()
+        mime.setText(note)
+        mime.setImageData(image)
+        self._ignore_next_clipboard_change()
+        self.clipboard.setMimeData(mime)
+        return True
+
     def _set_editor_image_clipboard(self, image: QImage) -> None:
         if image is None or image.isNull():
             return
@@ -349,6 +360,18 @@ class ClipboardController(QObject):
                 self._set_text_clipboard(content)
                 self.database.add_or_touch(content)
             self.refresh()
+        elif action == "copy_note":
+            note = self.database.get_note(record_id, kind) or ""
+            if note:
+                self._set_text_clipboard(note)
+        elif action == "copy_note_with_content":
+            note = self.database.get_note(record_id, kind) or ""
+            if not note:
+                return
+            if kind == "text":
+                self._set_text_clipboard(f"{content}\n\n备注：{note}")
+            elif kind == "image":
+                self._set_image_with_note_clipboard(image_data, note)
         elif action == "delete":
             self.database.delete(record_id, kind)
             self.refresh()
@@ -577,8 +600,12 @@ class ClipboardController(QObject):
             self.refresh()
 
     def _tray_activated(self, reason) -> None:
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self.show_window()
+        if reason != QSystemTrayIcon.Trigger:
+            return
+        if self.window.is_foreground():
+            self.window.hide()
+            return
+        self.show_window()
 
     def quit(self) -> None:
         self.tray.hide()

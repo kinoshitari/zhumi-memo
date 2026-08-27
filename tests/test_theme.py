@@ -5,12 +5,22 @@ from unittest.mock import MagicMock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QLabel, QLineEdit,
-    QListWidget, QMainWindow, QPlainTextEdit, QPushButton, QScrollBar,
-    QSpinBox, QSplitter, QTextEdit, QToolTip, QWidget,
+    QApplication, QCheckBox, QComboBox, QDateEdit, QDialog, QGraphicsView,
+    QKeySequenceEdit, QLabel, QLineEdit, QListWidget, QMainWindow,
+    QPlainTextEdit, QPushButton, QScrollArea, QScrollBar, QSpinBox,
+    QSplitter, QTextEdit, QToolButton, QToolTip, QWidget,
 )
 
-from clipboard_plus.theme import APP_STYLESHEET, apply_app_theme
+from clipboard_plus.theme import (
+    APP_STYLESHEET,
+    COLOR_CYAN_ACCENT,
+    COLOR_GOLD_ACCENT,
+    COLOR_ROSE_ACCENT,
+    COLOR_SKY_BASE,
+    COLOR_SKY_BORDER,
+    COLOR_TEXT_PRIMARY,
+    apply_app_theme,
+)
 
 
 class ThemePublicInterfaceTests(unittest.TestCase):
@@ -19,32 +29,60 @@ class ThemePublicInterfaceTests(unittest.TestCase):
         self.assertGreater(len(APP_STYLESHEET), 0)
         self.assertTrue(callable(apply_app_theme))
 
-    def test_palette_colors_present(self):
+    def test_light_palette_colors_present(self):
         core_palette = [
-            "#0B1734",
-            "#13264A",
-            "#52D7E8",
-            "#F3A6C8",
-            "#F5D58A",
-            "#F7FAFF",
+            COLOR_SKY_BASE,
+            COLOR_SKY_BORDER,
+            COLOR_CYAN_ACCENT,
+            COLOR_ROSE_ACCENT,
+            COLOR_GOLD_ACCENT,
+            COLOR_TEXT_PRIMARY,
+            "#FFFFFF",
+            "#F3F8FE",
+            "#42B0FF",
+            "#4D6B94",
         ]
         stylesheet_upper = APP_STYLESHEET.upper()
         for color in core_palette:
             with self.subTest(color=color):
                 self.assertIn(color.upper(), stylesheet_upper)
 
-    def test_required_selectors_present(self):
+    def test_gradients_and_translucent_surfaces_present(self):
+        stylesheet_lower = APP_STYLESHEET.lower()
+        self.assertIn("qlineargradient", stylesheet_lower)
+        self.assertIn("rgba(", stylesheet_lower)
+
+    def test_required_orchestrator_selectors_present(self):
+        required_orchestrator_selectors = [
+            "#windowChrome",
+            "#customTitleBar",
+            "#titleBarTitle",
+            "#titleBarSubtitle",
+            "#titleBarButton",
+            "#titleBarCloseButton",
+            "#contentDeck",
+            "#cheshireWatermark",
+        ]
+        for selector in required_orchestrator_selectors:
+            with self.subTest(selector=selector):
+                self.assertIn(selector, APP_STYLESHEET)
+
+    def test_common_widget_selectors_present(self):
         required_selectors = [
             "QMainWindow",
             "QDialog",
             "QWidget",
             "QPushButton",
             "QPushButton:checked",
+            "QToolButton",
             "QLineEdit",
             "QPlainTextEdit",
             "QTextEdit",
+            "QKeySequenceEdit",
+            "QDateEdit",
             "QListWidget",
             "QListWidget::item",
+            "QListWidget#categories",
             "QComboBox",
             "QSpinBox",
             "QCheckBox",
@@ -53,6 +91,19 @@ class ThemePublicInterfaceTests(unittest.TestCase):
             "QToolTip",
             "QLabel",
             "QSplitter",
+            "QScrollArea",
+            "QGraphicsView",
+            "QCalendarWidget",
+            "QLabel#brandMark",
+            "QPushButton#modeButton",
+            "QWidget#scratchEditor",
+            "QLabel#editorHeading",
+            "QLabel#editorDescription",
+            "QLabel#editorImageInfo",
+            "QPlainTextEdit#editorTextInput",
+            "QLabel#editorImageDropArea",
+            "QPushButton#editorPrimaryAction",
+            "QPushButton#editorClearAction",
         ]
         for selector in required_selectors:
             with self.subTest(selector=selector):
@@ -66,6 +117,7 @@ class ThemePublicInterfaceTests(unittest.TestCase):
             ":selected",
             ":disabled",
             ":focus",
+            ":read-only",
         ]
         for state in required_states:
             with self.subTest(state=state):
@@ -119,9 +171,20 @@ class ThemeSafetyAndApplicationTests(unittest.TestCase):
             QDialog(),
             QMainWindow(),
             QPushButton("Test Button"),
+            QToolButton(),
             QLineEdit("Test Input"),
             QPlainTextEdit("Test Content"),
+            QTextEdit("Test Document"),
             QListWidget(),
+            QComboBox(),
+            QSpinBox(),
+            QCheckBox("Test Option"),
+            QScrollBar(),
+            QSplitter(),
+            QScrollArea(),
+            QGraphicsView(),
+            QKeySequenceEdit(),
+            QDateEdit(),
         ]
         for widget in widgets:
             with self.subTest(widget_type=widget.__class__.__name__):

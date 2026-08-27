@@ -4,7 +4,12 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets/app_icon.png', 'assets'), ('assets/app_icon.ico', 'assets')],
+    datas=[
+        ('assets/app_icon.png', 'assets'),
+        ('assets/app_icon.ico', 'assets'),
+        ('assets/cheshire_sky_character.png', 'assets'),
+        ('assets/backgrounds', 'assets/backgrounds'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

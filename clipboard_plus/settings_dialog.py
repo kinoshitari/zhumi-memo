@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
             "图片始终归入图片分类；“*”表示缓存全部非图片格式，留空则不缓存文件。"
             "收藏或固定的内容不会被自动清理。", self,
         )
-        hint.setStyleSheet("color: #666;")
+        hint.setObjectName("hint")
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel, self)
         buttons.accepted.connect(self._apply)
         buttons.rejected.connect(self.reject)

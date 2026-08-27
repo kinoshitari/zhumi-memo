@@ -101,6 +101,9 @@ class ClipboardController(QObject):
         self.window.create_category_requested.connect(self.create_category)
         self.window.rename_category_requested.connect(self.rename_category)
         self.window.delete_category_requested.connect(self.delete_category)
+        self.window.editor_copy_text_requested.connect(self._set_text_clipboard)
+        self.window.editor_copy_image_requested.connect(self._set_editor_image_clipboard)
+        self.window.editor_copy_all_requested.connect(self._set_editor_clipboard)
 
     def _clipboard_changed(self) -> None:
         if self._ignore_clipboard_events:
@@ -205,6 +208,8 @@ class ClipboardController(QObject):
 
     def refresh(self, *_args) -> None:
         mode = self.window.current_mode()
+        if mode == "editor":
+            return
         date_start, date_end = self.window.date_range()
         if mode == "image":
             records = self.database.list_images(
@@ -237,6 +242,24 @@ class ClipboardController(QObject):
         if image.loadFromData(image_data):
             self._ignore_next_clipboard_change()
             self.clipboard.setImage(image)
+
+    def _set_editor_image_clipboard(self, image: QImage) -> None:
+        if image is None or image.isNull():
+            return
+        self._ignore_next_clipboard_change()
+        self.clipboard.setImage(QImage(image))
+
+    def _set_editor_clipboard(self, text: str, image: QImage) -> None:
+        has_image = image is not None and not image.isNull()
+        if not text and not has_image:
+            return
+        mime = QMimeData()
+        if text:
+            mime.setText(text)
+        if has_image:
+            mime.setImageData(QImage(image))
+        self._ignore_next_clipboard_change()
+        self.clipboard.setMimeData(mime)
 
     def _set_file_clipboard(self, path: Path) -> None:
         mime = QMimeData()

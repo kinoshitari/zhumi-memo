@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from .classification import CATEGORIES, classify_content
+from .editor_panel import ScratchEditor
 
 
 ID_ROLE = Qt.UserRole
@@ -53,6 +54,9 @@ class ClipboardWindow(QWidget):
     create_category_requested = Signal()
     rename_category_requested = Signal(str)
     delete_category_requested = Signal(str)
+    editor_copy_text_requested = Signal(str)
+    editor_copy_image_requested = Signal(object)
+    editor_copy_all_requested = Signal(str, object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -61,42 +65,37 @@ class ClipboardWindow(QWidget):
         self._date_start = None
         self._date_end = None
         self.setWindowTitle("猪咪备忘录")
-        self.resize(720, 540)
-        self.setMinimumSize(520, 340)
+        self.resize(860, 620)
+        self.setMinimumSize(600, 400)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-        self.setStyleSheet(
-            """
-            QWidget { background: #f5f5f5; color: #202020; font-size: 13px; }
-            QLineEdit { background: white; border: 1px solid #b7b7b7; border-radius: 4px; padding: 7px 9px; }
-            QListWidget { background: white; border: 1px solid #c8c8c8; outline: none; }
-            QListWidget::item { border-bottom: 1px solid #e6e6e6; padding: 7px 8px; }
-            QListWidget::item:selected { background: #d9eaff; color: #111; }
-            QListWidget#categories::item { border-bottom: none; padding: 6px 7px; }
-            QPushButton:checked { background: #d9eaff; border: 1px solid #8db9ec; }
-            QPushButton { padding: 5px 14px; border: 1px solid #bbb; background: white; }
-            QLabel#hint { color: #666; font-size: 11px; }
-            """
-        )
         self.text_mode = QPushButton("文本", self)
         self.image_mode = QPushButton("图片", self)
         self.file_mode = QPushButton("文件", self)
-        for button in (self.text_mode, self.image_mode, self.file_mode):
+        self.editor_mode = QPushButton("编辑", self)
+        for button in (self.text_mode, self.image_mode, self.file_mode, self.editor_mode):
             button.setCheckable(True)
+            button.setObjectName("modeButton")
         self.text_mode.setChecked(True)
         mode_group = QButtonGroup(self)
         mode_group.setExclusive(True)
         mode_group.addButton(self.text_mode)
         mode_group.addButton(self.image_mode)
         mode_group.addButton(self.file_mode)
+        mode_group.addButton(self.editor_mode)
         self.text_mode.clicked.connect(lambda: self.set_mode("text"))
         self.image_mode.clicked.connect(lambda: self.set_mode("image"))
         self.file_mode.clicked.connect(lambda: self.set_mode("file"))
+        self.editor_mode.clicked.connect(lambda: self.set_mode("editor"))
         mode_row = QHBoxLayout()
         mode_row.setSpacing(0)
         mode_row.addWidget(self.text_mode)
         mode_row.addWidget(self.image_mode)
         mode_row.addWidget(self.file_mode)
+        mode_row.addWidget(self.editor_mode)
         mode_row.addStretch(1)
+        brand = QLabel("CHESHIRE // CLIPBOARD DECK", self)
+        brand.setObjectName("brandMark")
+        mode_row.addWidget(brand)
 
         self.search = QLineEdit(self)
         self.search.setPlaceholderText("搜索内容、备注或来源程序…")
@@ -140,6 +139,19 @@ class ClipboardWindow(QWidget):
         splitter.setStretchFactor(1, 1)
         splitter.setCollapsible(0, False)
 
+        self.history_panel = QWidget(self)
+        history_layout = QVBoxLayout(self.history_panel)
+        history_layout.setContentsMargins(0, 0, 0, 0)
+        history_layout.setSpacing(7)
+        history_layout.addLayout(search_row)
+        history_layout.addWidget(splitter, 1)
+
+        self.editor = ScratchEditor(self)
+        self.editor.hide()
+        self.editor.copy_text_requested.connect(self.editor_copy_text_requested.emit)
+        self.editor.copy_image_requested.connect(self.editor_copy_image_requested.emit)
+        self.editor.copy_all_requested.connect(self.editor_copy_all_requested.emit)
+
         self.hint = QLabel("↑/↓ 选择   Enter 复制   Esc 隐藏", self)
         self.hint.setObjectName("hint")
         self.pin_window = QToolButton(self)
@@ -147,14 +159,17 @@ class ClipboardWindow(QWidget):
         self.pin_window.setCheckable(True)
         self.pin_window.setChecked(True)
         self.pin_window.toggled.connect(self._toggle_window_pin)
-        self.settings_link = QLabel('<a href="settings">设置</a>', self)
+        self.settings_link = QLabel(
+            '<a href="settings" style="color:#52D7E8;text-decoration:none;">设置</a>', self
+        )
+        self.settings_link.setObjectName("settingsLink")
         self.settings_link.setOpenExternalLinks(False)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 8)
         layout.setSpacing(7)
         layout.addLayout(mode_row)
-        layout.addLayout(search_row)
-        layout.addWidget(splitter, 1)
+        layout.addWidget(self.history_panel, 1)
+        layout.addWidget(self.editor, 1)
         footer = QHBoxLayout()
         footer.addWidget(self.hint)
         footer.addStretch(1)
@@ -173,12 +188,24 @@ class ClipboardWindow(QWidget):
         return self._mode
 
     def set_mode(self, mode: str) -> None:
+        if mode not in ("text", "image", "file", "editor"):
+            return
         if mode == self._mode:
             return
         self._mode = mode
         self.text_mode.setChecked(mode == "text")
         self.image_mode.setChecked(mode == "image")
         self.file_mode.setChecked(mode == "file")
+        self.editor_mode.setChecked(mode == "editor")
+        is_editor = mode == "editor"
+        self.history_panel.setVisible(not is_editor)
+        self.editor.setVisible(is_editor)
+        if is_editor:
+            self.hint.setText("Ctrl+V 粘贴   一键复制   Esc 隐藏")
+            self.mode_changed.emit(mode)
+            self.editor.focus_editor()
+            return
+        self.hint.setText("↑/↓ 选择   Enter 复制   Esc 隐藏")
         self.search.clear()
         placeholders = {
             "text": "搜索内容、备注或来源程序…",
@@ -274,8 +301,11 @@ class ClipboardWindow(QWidget):
         self._force_windows_foreground()
         QTimer.singleShot(60, self._force_windows_foreground)
         QTimer.singleShot(180, self._force_windows_foreground)
-        self.search.setFocus(Qt.ShortcutFocusReason)
-        self.search.selectAll()
+        if self._mode == "editor":
+            self.editor.focus_editor()
+        else:
+            self.search.setFocus(Qt.ShortcutFocusReason)
+            self.search.selectAll()
 
     def _force_windows_foreground(self) -> None:
         """Use the Win32 foreground APIs after a registered-hotkey activation."""
@@ -322,6 +352,8 @@ class ClipboardWindow(QWidget):
             pass
 
     def activate_current(self) -> None:
+        if self._mode == "editor":
+            return
         item = self.list_widget.currentItem()
         if item:
             self._activate_item(item)
@@ -516,7 +548,7 @@ class ClipboardWindow(QWidget):
             self.hide()
             event.accept()
             return
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+        if self._mode != "editor" and event.key() in (Qt.Key_Return, Qt.Key_Enter):
             self.activate_current()
             event.accept()
             return

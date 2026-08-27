@@ -56,6 +56,39 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.database.count(), 2)
         self.assertEqual(self.database.list_history()[0].content, "alpha clipboard test")
 
+    def test_editor_mode_copies_text_and_image_without_recording_itself(self):
+        self.controller.window.set_mode("editor")
+        editor = self.controller.window.editor
+        editor.text_editor.setPlainText("编辑台混合内容")
+        image = QImage(36, 24, QImage.Format_ARGB32)
+        image.fill(QColor("cyan"))
+        editor.set_image(image)
+
+        editor.copy_all_button.click()
+        self.app.processEvents()
+
+        mime = self.controller.clipboard.mimeData()
+        self.assertTrue(mime.hasText())
+        self.assertEqual(mime.text(), "编辑台混合内容")
+        self.assertTrue(mime.hasImage())
+        self.assertEqual(self.database.count("text"), 0)
+        self.assertEqual(self.database.count("image"), 0)
+
+    def test_editor_mode_hides_history_controls_and_clear_is_one_click(self):
+        self.controller.window.set_mode("editor")
+        editor = self.controller.window.editor
+        self.assertFalse(self.controller.window.history_panel.isVisible())
+        editor.text_editor.setPlainText("temporary")
+        image = QImage(18, 12, QImage.Format_ARGB32)
+        image.fill(QColor("pink"))
+        editor.set_image(image)
+        editor.clear_button.click()
+        self.assertEqual(editor.text(), "")
+        self.assertFalse(editor.has_image())
+
+        self.controller.window.set_mode("text")
+        self.assertFalse(editor.isVisible())
+
     def test_pause_blocks_new_clipboard_records(self):
         self.controller.set_paused(True)
         before = self.database.count()

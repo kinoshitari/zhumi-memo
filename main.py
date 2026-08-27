@@ -10,6 +10,7 @@ from clipboard_plus.config import APP_NAME, DEFAULT_HOTKEY, HOTKEY_ID, MAX_HISTO
 from clipboard_plus.database import HistoryDatabase
 from clipboard_plus.hotkey import GlobalHotkey
 from clipboard_plus.single_instance import SingleInstance
+from clipboard_plus.theme import apply_app_theme
 
 
 def main() -> int:
@@ -18,6 +19,7 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(str(resource_path("assets/app_icon.png"))))
+    apply_app_theme(app)
 
     instance = SingleInstance("Local\\ClipboardPlus.SingleInstance")
     if instance.already_running:

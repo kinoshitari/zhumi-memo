@@ -1,0 +1,49 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build and packaging output
+build/
+dist/
+release/
+direct_install_build/
+direct_install_dist/
+build_tools/
+*.egg-info/
+
+# Local application data and clipboard caches
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+images/
+files/
+previous-data-backup-*/
+storage_location.txt
+
+# Local configuration, logs, and temporary files
+.env
+.env.*
+*.log
+*.tmp
+*.bak
+*.part
+Thumbs.db
+Desktop.ini
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+
+# Android local build output
+android_app/build/
+android_app/.gradle/
+android_app/.deploy/
+android_app/local.properties

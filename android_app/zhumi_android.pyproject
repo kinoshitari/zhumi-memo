@@ -1,0 +1,10 @@
+{
+    "files": [
+        "main.py",
+        "../zhumi_core/__init__.py",
+        "../zhumi_core/classification.py",
+        "../zhumi_core/mobile_repository.py",
+        "../assets/android_icon_192.png",
+        "../assets/android_icon_512.png"
+    ]
+}

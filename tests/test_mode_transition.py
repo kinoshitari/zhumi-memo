@@ -4,8 +4,10 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtTest import QTest
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
+from clipboard_plus.config import resource_path
 from clipboard_plus.window import ClipboardWindow
 from clipboard_plus.window_chrome import MODE_BACKGROUND_PATHS
 
@@ -60,6 +62,13 @@ class ModeTransitionTests(unittest.TestCase):
                 self.window.set_mode(mode, animated=False)
                 self.assertEqual(self.window.content_deck._mode, mode)
                 self.assertFalse(self.window.content_deck._character.isNull())
+
+    def test_new_module_illustrations_have_real_alpha_channels(self):
+        for mode in ("image", "file", "editor"):
+            with self.subTest(mode=mode):
+                image = QImage(str(resource_path(MODE_BACKGROUND_PATHS[mode])))
+                self.assertFalse(image.isNull())
+                self.assertTrue(image.hasAlphaChannel())
 
 
 if __name__ == "__main__":

@@ -187,8 +187,6 @@ class GlassDeck(QWidget):
         # A fixed number of translucent brush paths keeps the wash organic
         # without area-dependent work or animation timers.
         strokes = (
-            ((0.02, 0.84), (0.22, 0.67), (0.43, 0.52), (0.68, 0.32),
-             QColor(89, 166, 226, 28), 8.0),
             ((0.28, 0.28), (0.47, 0.17), (0.69, 0.18), (0.93, 0.08),
              QColor(255, 255, 255, 62), 5.0),
             ((0.58, 0.92), (0.72, 0.85), (0.84, 0.83), (0.98, 0.72),

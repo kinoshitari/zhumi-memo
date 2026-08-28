@@ -1,5 +1,5 @@
 #define MyAppName "猪咪备忘录"
-#define MyAppVersion "4.3.0"
+#define MyAppVersion "4.3.4"
 #define MyAppPublisher "Local"
 #define MyAppExeName "ZhumiMemo.exe"
 

@@ -1,6 +1,7 @@
 import ctypes
 from ctypes import wintypes
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Tuple
 
 from PySide6.QtCore import QDate, QEvent, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QIcon, QKeyEvent, QPixmap
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from .classification import CATEGORIES, classify_content
+from .config import MAX_PANEL_TRANSPARENCY, MIN_PANEL_TRANSPARENCY
 from .editor_panel import ScratchEditor
 from .mode_transition import ModeTransitionController
 from .window_chrome import CustomTitleBar, GlassDeck, screen_resize_hit_test, unpack_screen_point
@@ -24,6 +26,9 @@ PINNED_ROLE = Qt.UserRole + 3
 KIND_ROLE = Qt.UserRole + 4
 BASE_TYPE_ROLE = Qt.UserRole + 5
 NOTE_ROLE = Qt.UserRole + 6
+
+WM_SYSCOMMAND = 0x0112
+SC_MINIMIZE = 0xF020
 
 
 def _summary(content: str, maximum: int = 220) -> str:
@@ -116,38 +121,44 @@ class ClipboardWindow(QWidget):
         search_row.addWidget(self.date_filter)
         self.categories = QListWidget(self)
         self.categories.setObjectName("categories")
+        self.categories.viewport().setObjectName("categoriesViewport")
         self.categories.setFixedWidth(115)
         self.categories.setContextMenuPolicy(Qt.CustomContextMenu)
         self.categories.customContextMenuRequested.connect(self._category_context_menu)
         self.add_category = QToolButton(self)
         self.add_category.setText("＋ 新建分类")
         self.add_category.clicked.connect(self.create_category_requested.emit)
-        category_panel = QWidget(self)
-        category_layout = QVBoxLayout(category_panel)
+        self.category_panel = QWidget(self)
+        self.category_panel.setObjectName("categoryPanel")
+        category_layout = QVBoxLayout(self.category_panel)
         category_layout.setContentsMargins(0, 0, 0, 0)
         category_layout.setSpacing(5)
         category_layout.addWidget(self.categories, 1)
         category_layout.addWidget(self.add_category)
-        category_panel.setFixedWidth(115)
+        self.category_panel.setFixedWidth(115)
 
         self.list_widget = QListWidget(self)
+        self.list_widget.setObjectName("historyList")
+        self.list_widget.viewport().setObjectName("historyViewport")
         self.list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list_widget.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_widget.setIconSize(QSize(112, 78))
         self.list_widget.installEventFilter(self)
-        splitter = QSplitter(Qt.Horizontal, self)
-        splitter.addWidget(category_panel)
-        splitter.addWidget(self.list_widget)
-        splitter.setStretchFactor(1, 1)
-        splitter.setCollapsible(0, False)
+        self.history_splitter = QSplitter(Qt.Horizontal, self)
+        self.history_splitter.setObjectName("historySplitter")
+        self.history_splitter.addWidget(self.category_panel)
+        self.history_splitter.addWidget(self.list_widget)
+        self.history_splitter.setStretchFactor(1, 1)
+        self.history_splitter.setCollapsible(0, False)
 
         self.history_panel = QWidget(self)
+        self.history_panel.setObjectName("historyPanel")
         history_layout = QVBoxLayout(self.history_panel)
         history_layout.setContentsMargins(0, 0, 0, 0)
         history_layout.setSpacing(7)
         history_layout.addLayout(search_row)
-        history_layout.addWidget(splitter, 1)
+        history_layout.addWidget(self.history_splitter, 1)
 
         self.editor = ScratchEditor(self)
         self.editor.hide()
@@ -205,6 +216,7 @@ class ClipboardWindow(QWidget):
         self.settings_link.linkActivated.connect(lambda _link: self.settings_requested.emit())
         self._rebuild_categories()
         self._transition_manager = ModeTransitionController(self)
+        self._panel_transparency = 0
 
     def _toggle_maximized(self) -> None:
         if self.isMaximized():
@@ -220,6 +232,86 @@ class ClipboardWindow(QWidget):
 
     def current_mode(self) -> str:
         return self._mode
+
+    def set_panel_transparency(self, value: int) -> None:
+        """Apply a readable, adjustable glass surface to the large content panels."""
+        value = max(MIN_PANEL_TRANSPARENCY, min(MAX_PANEL_TRANSPARENCY, int(value)))
+        self._panel_transparency = value
+        opacity = (100 - value) / 100.0
+        # Keep the slider mapping literal: 0% transparency is fully opaque,
+        # while 100% makes every adjustable content surface fully transparent.
+        list_opacity = opacity
+        sidebar_opacity = opacity
+        editor_opacity = opacity
+        drop_opacity = opacity
+        self.history_panel.setStyleSheet(
+            "QWidget#historyPanel { background-color: transparent; }"
+        )
+        self.history_splitter.setStyleSheet(
+            "QSplitter#historySplitter { background-color: transparent; }"
+        )
+        self.category_panel.setStyleSheet(
+            "QWidget#categoryPanel { background-color: transparent; }"
+        )
+        self._set_list_surface(
+            self.list_widget, "historyList", "historyViewport",
+            (255, 255, 255), list_opacity,
+        )
+        self._set_list_surface(
+            self.categories, "categories", "categoriesViewport",
+            (240, 247, 255), sidebar_opacity,
+        )
+        self.editor.text_editor.setStyleSheet(
+            "QPlainTextEdit#editorTextInput { background-color: rgba(255, 255, 255, %.2f); }"
+            % editor_opacity
+        )
+        self.editor.image_area.setStyleSheet(
+            "QLabel#editorImageDropArea { background-color: rgba(238, 246, 255, %.2f); }"
+            % drop_opacity
+        )
+        self.editor.setStyleSheet(
+            "QWidget#scratchEditor { background-color: rgba(245, 250, 255, %.2f); }"
+            % opacity
+        )
+        editor_splitter = self.editor.findChild(QSplitter, "editorSplitter")
+        editor_image_panel = self.editor.findChild(QWidget, "editorImagePanel")
+        if editor_splitter is not None:
+            editor_splitter.setStyleSheet(
+                "QSplitter#editorSplitter { background-color: transparent; }"
+            )
+        if editor_image_panel is not None:
+            editor_image_panel.setStyleSheet(
+                "QWidget#editorImagePanel { background-color: transparent; }"
+            )
+
+    @staticmethod
+    def _set_list_surface(
+        widget: QListWidget,
+        widget_name: str,
+        viewport_name: str,
+        rgb: Tuple[int, int, int],
+        opacity: float,
+    ) -> None:
+        """Style both an item view and its real painting surface.
+
+        QAbstractScrollArea paints its records on an internal viewport. Styling
+        only QListWidget leaves that viewport on the opaque application base,
+        which is why the illustration was visible through the sidebar border
+        but not through the history rows.
+        """
+        red, green, blue = rgb
+        surface = "rgba(%d, %d, %d, %.2f)" % (red, green, blue, opacity)
+        widget.setStyleSheet(
+            "QListWidget#%s { background-color: %s; }" % (widget_name, surface)
+        )
+        viewport = widget.viewport()
+        viewport.setAttribute(Qt.WA_StyledBackground, True)
+        viewport.setStyleSheet(
+            "QWidget#%s { background-color: %s; }" % (viewport_name, surface)
+        )
+
+    def panel_transparency(self) -> int:
+        return self._panel_transparency
 
     def set_mode(self, mode: str, animated: bool = True) -> None:
         self._transition_manager.set_mode(mode, animated)
@@ -607,13 +699,27 @@ class ClipboardWindow(QWidget):
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
-        if event.type() == QEvent.WindowStateChange and hasattr(self, "title_bar"):
+        if event.type() != QEvent.WindowStateChange:
+            return
+        if self.isMinimized():
+            # Windows turns a second click on the active taskbar button into a
+            # minimize request. This application treats minimize as hide-to-
+            # tray, while Alt+V remains an unconditional restore path.
+            QTimer.singleShot(0, self.hide)
+            return
+        if hasattr(self, "title_bar"):
             self._sync_chrome_state()
 
     def nativeEvent(self, event_type, message):
         """Restore native edge/corner resizing for the frameless Windows window."""
         try:
             msg = wintypes.MSG.from_address(int(message))
+            if (
+                msg.message == WM_SYSCOMMAND
+                and (int(msg.wParam) & 0xFFF0) == SC_MINIMIZE
+            ):
+                self.hide()
+                return True, 0
             if msg.message == 0x0084 and not self.isMaximized():  # WM_NCHITTEST
                 user32 = ctypes.windll.user32
                 rect = wintypes.RECT()

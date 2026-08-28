@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QM
 
 from .classification import CATEGORIES
 from .config import (
-    APP_ID, APP_NAME, DEFAULT_HOTKEY, MAX_HISTORY, resource_path,
+    APP_ID, APP_NAME, DEFAULT_HOTKEY, DEFAULT_PANEL_TRANSPARENCY, MAX_HISTORY, resource_path,
     set_storage_location,
 )
 from .database import HistoryDatabase
@@ -49,6 +49,13 @@ class ClipboardController(QObject):
         self.hotkey_update_callback = None
         self.clipboard = app.clipboard()
         self.window = ClipboardWindow()
+        try:
+            panel_transparency = int(self.database.get_setting(
+                "panel_transparency", str(DEFAULT_PANEL_TRANSPARENCY)
+            ))
+        except ValueError:
+            panel_transparency = DEFAULT_PANEL_TRANSPARENCY
+        self.window.set_panel_transparency(panel_transparency)
         self.thread_pool = QThreadPool.globalInstance()
         self._background_tasks = set()
         self._preview_dialogs = set()
@@ -541,11 +548,17 @@ class ClipboardController(QObject):
         file_cache_extensions = self.database.get_setting(
             "file_cache_extensions", DEFAULT_FILE_CACHE_EXTENSIONS
         )
+        panel_transparency = self.window.panel_transparency()
         autostart = bool(self.pythonw_path and is_autostart_enabled(APP_ID, self.pythonw_path, self.main_script))
         dialog = SettingsDialog(
             hotkey, history_limit, image_limit, file_cache_limit, file_cache_extensions,
             str(self.database.path.parent), self.database.storage_usage(),
-            autostart, self.window,
+            panel_transparency, autostart, self.window,
+        )
+        original_transparency = panel_transparency
+        dialog.transparency_preview.connect(self.window.set_panel_transparency)
+        dialog.rejected.connect(
+            lambda: self.window.set_panel_transparency(original_transparency)
         )
         dialog.apply_requested.connect(lambda values: self._apply_settings(dialog, values))
         dialog.exec()
@@ -581,7 +594,7 @@ class ClipboardController(QObject):
             )
         for key in (
             "hotkey", "history_limit", "image_limit", "file_cache_limit_mb",
-            "file_cache_extensions",
+            "file_cache_extensions", "panel_transparency",
         ):
             self.database.set_setting(key, str(values[key]))
         self.database.set_limit(values["history_limit"])

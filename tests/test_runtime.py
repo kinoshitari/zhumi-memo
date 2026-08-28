@@ -245,6 +245,20 @@ class RuntimeTests(unittest.TestCase):
             activate.assert_called_once_with()
             hide.assert_not_called()
 
+    def test_minimize_state_is_converted_to_hide_to_tray(self):
+        window = self.controller.window
+        window.show()
+        self.app.processEvents()
+        self.assertTrue(window.isVisible())
+        window.showMinimized()
+        self.app.processEvents()
+        self.app.processEvents()
+        self.assertFalse(window.isVisible())
+
+        with patch.object(window, "show_and_activate") as activate:
+            self.controller.show_window()
+            activate.assert_called_once_with()
+
     def test_escape_hides_window(self):
         self.controller.window.show()
         event = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
@@ -263,20 +277,54 @@ class RuntimeTests(unittest.TestCase):
     def test_settings_ranges_cover_file_capacity_and_200_images(self):
         dialog = SettingsDialog(
             "Alt+V", 1000, 200, 2048, "*", str(Path(self.temp.name)),
-            {"total": 0, "text": 0, "image": 0, "file": 0}, False,
+            {"total": 0, "text": 0, "image": 0, "file": 0}, 42, False,
         )
         try:
             self.assertEqual(dialog.image_limit.maximum(), 200)
             self.assertEqual(dialog.file_cache_limit.minimum(), 128)
             self.assertEqual(dialog.file_cache_limit.maximum(), 2048)
             self.assertEqual(dialog.file_cache_extensions.text(), "*")
+            self.assertEqual(dialog.panel_transparency.minimum(), 0)
+            self.assertEqual(dialog.panel_transparency.maximum(), 100)
+            previews = []
+            dialog.transparency_preview.connect(previews.append)
+            dialog.panel_transparency.setValue(55)
+            self.assertEqual(previews, [55])
+            self.assertEqual(dialog.panel_transparency_value.text(), "55%")
             received = []
             dialog.apply_requested.connect(received.append)
             dialog.file_cache_extensions.setText("pdf; DOCX")
             dialog._apply()
             self.assertEqual(received[0]["file_cache_extensions"], ".pdf, .docx")
+            self.assertEqual(received[0]["panel_transparency"], 55)
         finally:
             dialog.close()
+
+    def test_panel_transparency_is_clamped_and_applied_to_large_panels(self):
+        window = self.controller.window
+        window.set_panel_transparency(55)
+        self.assertEqual(window.panel_transparency(), 55)
+        self.assertIn("0.45", window.list_widget.styleSheet())
+        self.assertIn("0.45", window.list_widget.viewport().styleSheet())
+        self.assertIn("historyViewport", window.list_widget.viewport().styleSheet())
+        self.assertIn("transparent", window.history_panel.styleSheet())
+        self.assertIn("transparent", window.history_splitter.styleSheet())
+        self.assertIn("0.45", window.editor.text_editor.styleSheet())
+        window.set_panel_transparency(999)
+        self.assertEqual(window.panel_transparency(), 100)
+        self.assertIn("0.00", window.list_widget.viewport().styleSheet())
+        self.assertIn("0.00", window.categories.viewport().styleSheet())
+        self.assertIn("0.00", window.editor.text_editor.styleSheet())
+        self.assertIn("0.00", window.editor.image_area.styleSheet())
+        self.assertIn("0.00", window.editor.styleSheet())
+        self.assertIn("transparent", window.category_panel.styleSheet())
+        window.set_panel_transparency(-1)
+        self.assertEqual(window.panel_transparency(), 0)
+        self.assertIn("1.00", window.list_widget.viewport().styleSheet())
+        self.assertIn("1.00", window.categories.viewport().styleSheet())
+        self.assertIn("1.00", window.editor.text_editor.styleSheet())
+        self.assertIn("1.00", window.editor.image_area.styleSheet())
+        self.assertIn("1.00", window.editor.styleSheet())
 
     def test_clear_note_action_keeps_automatic_favorite(self):
         record_id = self.database.add_or_touch("annotated")

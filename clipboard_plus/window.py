@@ -226,6 +226,8 @@ class ClipboardWindow(QWidget):
         self._rebuild_categories()
         self._transition_manager = ModeTransitionController(self)
         self._panel_transparency = 0
+        self._activation_token = 0
+        self._activation_timers = []
 
     def _toggle_maximized(self) -> None:
         if self.isMaximized():
@@ -358,6 +360,8 @@ class ClipboardWindow(QWidget):
         self.mode_changed.emit(mode)
 
     def _focus_current_mode(self) -> None:
+        if not self.isVisible() or self.isMinimized():
+            return
         if self._mode == "editor":
             self.editor.focus_editor()
         else:
@@ -438,7 +442,20 @@ class ClipboardWindow(QWidget):
         if self.list_widget.count():
             self.list_widget.setCurrentRow(selected_row)
 
+    def _cancel_pending_activations(self) -> None:
+        self._activation_token += 1
+        for timer in self._activation_timers:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except (RuntimeError, TypeError):
+                pass
+        self._activation_timers.clear()
+
     def show_and_activate(self) -> None:
+        self._cancel_pending_activations()
+        token = self._activation_token
+
         if self.isMinimized():
             self.showNormal()
         else:
@@ -446,13 +463,34 @@ class ClipboardWindow(QWidget):
         self.raise_()
         self.activateWindow()
         self._force_windows_foreground()
-        QTimer.singleShot(60, self._force_windows_foreground)
-        QTimer.singleShot(180, self._force_windows_foreground)
-        if self._mode == "editor":
-            self.editor.focus_editor()
-        else:
-            self.search.setFocus(Qt.ShortcutFocusReason)
+        self._focus_current_mode()
+        if self._mode != "editor":
             self.search.selectAll()
+
+        def _delayed_activate(token_val: int) -> None:
+            if token_val != self._activation_token:
+                return
+            if not self.isVisible() or self.isMinimized():
+                return
+            self._force_windows_foreground()
+            if not self.isActiveWindow():
+                self.activateWindow()
+            self._focus_current_mode()
+
+        for delay in (60, 180):
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(
+                lambda t=token, tm=timer: self._on_activation_timer(t, tm, _delayed_activate)
+            )
+            self._activation_timers.append(timer)
+            timer.start(delay)
+
+    def _on_activation_timer(self, token_val: int, timer: QTimer, callback) -> None:
+        if timer in self._activation_timers:
+            self._activation_timers.remove(timer)
+        timer.deleteLater()
+        callback(token_val)
 
     def is_foreground(self) -> bool:
         """Return whether this exact native window is currently foreground."""
@@ -467,6 +505,8 @@ class ClipboardWindow(QWidget):
 
     def _force_windows_foreground(self) -> None:
         """Use the Win32 foreground APIs after a registered-hotkey activation."""
+        if not self.isVisible() or self.isMinimized():
+            return
         try:
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
@@ -713,7 +753,11 @@ class ClipboardWindow(QWidget):
         # Minimize must remain a real Windows minimize operation so the
         # taskbar button stays present.  Explicit close/Esc/tray actions are
         # the only paths that hide the window to the notification area.
-        if hasattr(self, "title_bar") and not self.isMinimized():
+        if self.isMinimized():
+            self._cancel_pending_activations()
+            if hasattr(self, "_transition_manager"):
+                self._transition_manager.finish_immediately()
+        elif hasattr(self, "title_bar"):
             self._sync_chrome_state()
 
     def nativeEvent(self, event_type, message):
@@ -769,11 +813,14 @@ class ClipboardWindow(QWidget):
         return super().eventFilter(watched, event)
 
     def hideEvent(self, event) -> None:
+        self._cancel_pending_activations()
         if hasattr(self, "_transition_manager"):
             self._transition_manager.finish_immediately()
         super().hideEvent(event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        self._transition_manager.finish_immediately()
+        self._cancel_pending_activations()
+        if hasattr(self, "_transition_manager"):
+            self._transition_manager.finish_immediately()
         self.hide()
         event.ignore()

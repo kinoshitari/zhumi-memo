@@ -366,6 +366,52 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(mime.hasImage())
         self.assertEqual(self.database.count("image"), 1)
 
+    def test_delayed_activation_timers_cancelled_on_hide(self):
+        window = self.controller.window
+        window.show_and_activate()
+        first_token = window._activation_token
+        self.assertGreater(first_token, 0)
+        window.hide()
+        self.assertGreater(window._activation_token, first_token)
+        self.assertEqual(len(window._activation_timers), 0)
+        self.app.processEvents()
+        time.sleep(0.22)
+        self.app.processEvents()
+        self.assertFalse(window.isVisible())
+
+    def test_delayed_activation_timers_cancelled_on_minimize(self):
+        window = self.controller.window
+        window.show_and_activate()
+        first_token = window._activation_token
+        window.showMinimized()
+        self.app.processEvents()
+        self.assertGreater(window._activation_token, first_token)
+        self.assertEqual(len(window._activation_timers), 0)
+        time.sleep(0.22)
+        self.app.processEvents()
+        self.assertTrue(window.isVisible())
+        self.assertTrue(window.isMinimized())
+
+    def test_rapid_show_and_activate_coalesces_timers(self):
+        window = self.controller.window
+        for _ in range(3):
+            window.show_and_activate()
+        token_after_rapid = window._activation_token
+        self.assertGreaterEqual(token_after_rapid, 3)
+        self.assertEqual(len(window._activation_timers), 2)
+        time.sleep(0.22)
+        self.app.processEvents()
+        self.assertTrue(window.isVisible())
+        self.assertFalse(window.isMinimized())
+
+    def test_alt_v_repeated_calls_never_toggle_hidden(self):
+        window = self.controller.window
+        for _ in range(3):
+            self.controller.show_window()
+            self.app.processEvents()
+            self.assertTrue(window.isVisible())
+            self.assertFalse(window.isMinimized())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,12 @@ class ModeTransitionController(QObject):
     def is_animating(self) -> bool:
         return self._phase is not None
 
+    def target_mode(self) -> Optional[str]:
+        return self._target_mode
+
+    def phase(self) -> Optional[str]:
+        return self._phase
+
     def _panel_for_mode(self, mode: str) -> QWidget:
         return self.window.editor if mode == "editor" else self.window.history_panel
 
@@ -53,8 +59,8 @@ class ModeTransitionController(QObject):
         animation.deleteLater()
 
     @staticmethod
-    def _remove_effect(widget: QWidget) -> None:
-        if widget.graphicsEffect() is not None:
+    def _remove_effect(widget: Optional[QWidget]) -> None:
+        if widget is not None and widget.graphicsEffect() is not None:
             widget.setGraphicsEffect(None)
 
     def set_mode(self, mode: str, animated: bool = True) -> None:

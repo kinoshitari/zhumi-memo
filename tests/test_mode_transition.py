@@ -70,6 +70,69 @@ class ModeTransitionTests(unittest.TestCase):
                 self.assertFalse(image.isNull())
                 self.assertTrue(image.hasAlphaChannel())
 
+    def test_interruption_during_fade_in_reverses_cleanly_and_settles_on_latest(self):
+        self.window.show()
+        self.app.processEvents()
+        self.window.set_mode("editor")
+        QTest.qWait(100)
+        self.assertEqual(self.window._transition_manager.phase(), "fade_in")
+        self.window.set_mode("text")
+        self.assertEqual(self.window._transition_manager.target_mode(), "text")
+        QTest.qWait(240)
+        self.assertEqual(self.window.current_mode(), "text")
+        self.assertEqual(self.window.content_deck._mode, "text")
+        self.assertTrue(self.window.history_panel.isVisibleTo(self.window))
+        self.assertFalse(self.window.editor.isVisibleTo(self.window))
+        self.assertFalse(self.window._transition_manager.is_animating())
+        self.assertIsNone(self.window.editor.graphicsEffect())
+        self.assertIsNone(self.window.history_panel.graphicsEffect())
+
+    def test_same_mode_reselect_is_noop_and_does_not_restart_animation(self):
+        self.window.show()
+        self.app.processEvents()
+        self.window.set_mode("text")
+        self.assertFalse(self.window._transition_manager.is_animating())
+        self.window.set_mode("image")
+        self.assertTrue(self.window._transition_manager.is_animating())
+        self.window.set_mode("image")
+        QTest.qWait(240)
+        self.assertEqual(self.window.current_mode(), "image")
+        self.assertFalse(self.window._transition_manager.is_animating())
+
+    def test_rapid_interruption_avoids_redundant_mode_changed_emissions(self):
+        self.window.show()
+        self.app.processEvents()
+        emitted_modes = []
+        self.window.mode_changed.connect(emitted_modes.append)
+        for mode in ("image", "file", "editor", "image", "text"):
+            self.window.set_mode(mode)
+            QTest.qWait(5)
+        QTest.qWait(240)
+        self.assertEqual(self.window.current_mode(), "text")
+        self.assertEqual(emitted_modes, [])
+
+    def test_finish_immediately_cleans_up_all_graphics_effects_and_animations(self):
+        self.window.show()
+        self.app.processEvents()
+        self.window.set_mode("editor")
+        self.assertTrue(self.window._transition_manager.is_animating())
+        self.window._transition_manager.finish_immediately()
+        self.assertEqual(self.window.current_mode(), "editor")
+        self.assertFalse(self.window._transition_manager.is_animating())
+        self.assertIsNone(self.window.editor.graphicsEffect())
+        self.assertIsNone(self.window.history_panel.graphicsEffect())
+
+    def test_hide_event_cancels_in_flight_transition_and_applies_target(self):
+        self.window.show()
+        self.app.processEvents()
+        self.window.set_mode("editor")
+        self.assertTrue(self.window._transition_manager.is_animating())
+        self.window.hide()
+        self.assertEqual(self.window.current_mode(), "editor")
+        self.assertFalse(self.window._transition_manager.is_animating())
+        self.assertIsNone(self.window.editor.graphicsEffect())
+        self.assertIsNone(self.window.history_panel.graphicsEffect())
+
 
 if __name__ == "__main__":
     unittest.main()

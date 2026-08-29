@@ -27,10 +27,6 @@ KIND_ROLE = Qt.UserRole + 4
 BASE_TYPE_ROLE = Qt.UserRole + 5
 NOTE_ROLE = Qt.UserRole + 6
 
-WM_SYSCOMMAND = 0x0112
-SC_MINIMIZE = 0xF020
-
-
 def _summary(content: str, maximum: int = 220) -> str:
     sample = content[: maximum * 3].replace("\x00", "")
     one_line = " ".join(sample.split())
@@ -74,7 +70,20 @@ class ClipboardWindow(QWidget):
         self.setWindowTitle("猪咪备忘录")
         self.resize(860, 620)
         self.setMinimumSize(600, 400)
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        # Keep the custom frameless chrome, but also expose the native window
+        # capabilities Explorer uses for taskbar-button toggling.  Without a
+        # native minimize box Windows may only reactivate this window when its
+        # already-active taskbar button is clicked, so no SC_MINIMIZE ever
+        # reaches nativeEvent().
+        self.setWindowFlags(
+            Qt.Window
+            | Qt.FramelessWindowHint
+            | Qt.WindowSystemMenuHint
+            | Qt.WindowMinimizeButtonHint
+            | Qt.WindowMaximizeButtonHint
+            | Qt.WindowCloseButtonHint
+            | Qt.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.text_mode = QPushButton("文本", self)
         self.image_mode = QPushButton("图片", self)
@@ -701,25 +710,16 @@ class ClipboardWindow(QWidget):
         super().changeEvent(event)
         if event.type() != QEvent.WindowStateChange:
             return
-        if self.isMinimized():
-            # Windows turns a second click on the active taskbar button into a
-            # minimize request. This application treats minimize as hide-to-
-            # tray, while Alt+V remains an unconditional restore path.
-            QTimer.singleShot(0, self.hide)
-            return
-        if hasattr(self, "title_bar"):
+        # Minimize must remain a real Windows minimize operation so the
+        # taskbar button stays present.  Explicit close/Esc/tray actions are
+        # the only paths that hide the window to the notification area.
+        if hasattr(self, "title_bar") and not self.isMinimized():
             self._sync_chrome_state()
 
     def nativeEvent(self, event_type, message):
         """Restore native edge/corner resizing for the frameless Windows window."""
         try:
             msg = wintypes.MSG.from_address(int(message))
-            if (
-                msg.message == WM_SYSCOMMAND
-                and (int(msg.wParam) & 0xFFF0) == SC_MINIMIZE
-            ):
-                self.hide()
-                return True, 0
             if msg.message == 0x0084 and not self.isMaximized():  # WM_NCHITTEST
                 user32 = ctypes.windll.user32
                 rect = wintypes.RECT()

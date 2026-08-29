@@ -245,7 +245,7 @@ class RuntimeTests(unittest.TestCase):
             activate.assert_called_once_with()
             hide.assert_not_called()
 
-    def test_minimize_state_is_converted_to_hide_to_tray(self):
+    def test_minimize_state_remains_visible_in_taskbar(self):
         window = self.controller.window
         window.show()
         self.app.processEvents()
@@ -253,7 +253,8 @@ class RuntimeTests(unittest.TestCase):
         window.showMinimized()
         self.app.processEvents()
         self.app.processEvents()
-        self.assertFalse(window.isVisible())
+        self.assertTrue(window.isVisible())
+        self.assertTrue(window.isMinimized())
 
         with patch.object(window, "show_and_activate") as activate:
             self.controller.show_window()

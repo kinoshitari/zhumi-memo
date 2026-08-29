@@ -52,6 +52,9 @@ class WindowChromeTests(unittest.TestCase):
         window = ClipboardWindow()
         try:
             self.assertTrue(window.windowFlags() & Qt.FramelessWindowHint)
+            self.assertTrue(window.windowFlags() & Qt.WindowSystemMenuHint)
+            self.assertTrue(window.windowFlags() & Qt.WindowMinimizeButtonHint)
+            self.assertTrue(window.windowFlags() & Qt.WindowMaximizeButtonHint)
             self.assertTrue(window.testAttribute(Qt.WA_TranslucentBackground))
             self.assertEqual(window.window_chrome.objectName(), "windowChrome")
             self.assertEqual(window.title_bar.objectName(), "customTitleBar")

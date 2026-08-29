@@ -6,7 +6,7 @@
 
 ## Windows 安装包
 
-- 安装程序：`release/ZhumiMemo-Setup-4.3.4.exe`
+- 安装程序：`release/ZhumiMemo-Setup-4.3.6.exe`
 - 默认安装位置：`%LOCALAPPDATA%\Programs\ZhumiMemo`
 - 安装程序可创建桌面快捷方式，并可选择登录后自动启动。
 - 本地构建包未使用商业代码签名证书，Windows SmartScreen 可能显示未知发布者提示。

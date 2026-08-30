@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QM
 
 from .classification import CATEGORIES
 from .config import (
-    APP_ID, APP_NAME, DEFAULT_HOTKEY, DEFAULT_PANEL_TRANSPARENCY, MAX_HISTORY, resource_path,
+    APP_ID, APP_NAME, DEFAULT_ALWAYS_ON_TOP, DEFAULT_HOTKEY,
+    DEFAULT_PANEL_TRANSPARENCY, MAX_HISTORY, resource_path,
     set_storage_location,
 )
 from .database import HistoryDatabase
@@ -49,6 +50,11 @@ class ClipboardController(QObject):
         self.hotkey_update_callback = None
         self.clipboard = app.clipboard()
         self.window = ClipboardWindow()
+        always_on_top_setting = self.database.get_setting(
+            "always_on_top", "true" if DEFAULT_ALWAYS_ON_TOP else "false"
+        )
+        always_on_top = always_on_top_setting.strip().lower() in ("1", "true", "yes", "on")
+        self.window.set_pinned(always_on_top)
         try:
             panel_transparency = int(self.database.get_setting(
                 "panel_transparency", str(DEFAULT_PANEL_TRANSPARENCY)
@@ -105,6 +111,7 @@ class ClipboardController(QObject):
         self.window.date_changed.connect(self.refresh)
         self.window.action_requested.connect(self.handle_action)
         self.window.settings_requested.connect(self.show_settings)
+        self.window.pin_toggled.connect(self._window_pin_toggled)
         self.window.create_category_requested.connect(self.create_category)
         self.window.rename_category_requested.connect(self.rename_category)
         self.window.delete_category_requested.connect(self.delete_category)
@@ -538,6 +545,9 @@ class ClipboardController(QObject):
         if paused:
             self.tray.showMessage(APP_NAME, "文本、图片和文件记录均已暂停。", QSystemTrayIcon.Information, 2500)
 
+    def _window_pin_toggled(self, pinned: bool) -> None:
+        self.database.set_setting("always_on_top", "true" if pinned else "false")
+
     def show_settings(self) -> None:
         hotkey = self.database.get_setting("hotkey", DEFAULT_HOTKEY)
         history_limit = int(self.database.get_setting("history_limit", str(MAX_HISTORY)))
@@ -550,10 +560,12 @@ class ClipboardController(QObject):
         )
         panel_transparency = self.window.panel_transparency()
         autostart = bool(self.pythonw_path and is_autostart_enabled(APP_ID, self.pythonw_path, self.main_script))
+        always_on_top = self.window.is_pinned()
         dialog = SettingsDialog(
             hotkey, history_limit, image_limit, file_cache_limit, file_cache_extensions,
             str(self.database.path.parent), self.database.storage_usage(),
             panel_transparency, autostart, self.window,
+            always_on_top=always_on_top,
         )
         original_transparency = panel_transparency
         dialog.transparency_preview.connect(self.window.set_panel_transparency)
@@ -597,6 +609,9 @@ class ClipboardController(QObject):
             "file_cache_extensions", "panel_transparency",
         ):
             self.database.set_setting(key, str(values[key]))
+        always_on_top = bool(values.get("always_on_top", DEFAULT_ALWAYS_ON_TOP))
+        self.database.set_setting("always_on_top", "true" if always_on_top else "false")
+        self.window.set_pinned(always_on_top)
         self.database.set_limit(values["history_limit"])
         self.database.set_image_limit(values["image_limit"])
         self.database.set_file_cache_limit_mb(values["file_cache_limit_mb"])

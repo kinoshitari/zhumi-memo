@@ -54,6 +54,7 @@ class ClipboardWindow(QWidget):
     date_changed = Signal()
     action_requested = Signal(str, int, str)
     settings_requested = Signal()
+    pin_toggled = Signal(bool)
     create_category_requested = Signal()
     rename_category_requested = Signal(str)
     delete_category_requested = Signal(str)
@@ -82,7 +83,6 @@ class ClipboardWindow(QWidget):
             | Qt.WindowMinimizeButtonHint
             | Qt.WindowMaximizeButtonHint
             | Qt.WindowCloseButtonHint
-            | Qt.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.text_mode = QPushButton("文本", self)
@@ -177,10 +177,15 @@ class ClipboardWindow(QWidget):
 
         self.hint = QLabel("↑/↓ 选择   Enter 复制   Esc 隐藏", self)
         self.hint.setObjectName("hint")
+        self.scroll_top_button = QToolButton(self)
+        self.scroll_top_button.setText("回到顶部")
+        self.scroll_top_button.setObjectName("scrollTopButton")
+        self.scroll_top_button.clicked.connect(self.scroll_to_top)
+        self.scroll_top_button.setEnabled(False)
         self.pin_window = QToolButton(self)
-        self.pin_window.setText("固定窗口")
+        self.pin_window.setText("普通窗口")
         self.pin_window.setCheckable(True)
-        self.pin_window.setChecked(True)
+        self.pin_window.setChecked(False)
         self.pin_window.toggled.connect(self._toggle_window_pin)
         self.settings_link = QLabel(
             '<a href="settings" style="color:#52D7E8;text-decoration:none;">设置</a>', self
@@ -201,6 +206,7 @@ class ClipboardWindow(QWidget):
         footer = QHBoxLayout()
         footer.addWidget(self.hint)
         footer.addStretch(1)
+        footer.addWidget(self.scroll_top_button)
         footer.addWidget(self.pin_window)
         footer.addWidget(self.settings_link)
         layout.addLayout(footer)
@@ -346,9 +352,11 @@ class ClipboardWindow(QWidget):
         self.editor.setVisible(is_editor)
         if is_editor:
             self.hint.setText("Ctrl+V 粘贴   一键复制   Esc 隐藏")
+            self.scroll_top_button.setEnabled(False)
             self.mode_changed.emit(mode)
             return
         self.hint.setText("↑/↓ 选择   Enter 复制   Esc 隐藏")
+        self.scroll_top_button.setEnabled(self.list_widget.count() > 0)
         self.search.clear()
         placeholders = {
             "text": "搜索内容、备注或来源程序…",
@@ -441,6 +449,20 @@ class ClipboardWindow(QWidget):
                 selected_row = row
         if self.list_widget.count():
             self.list_widget.setCurrentRow(selected_row)
+        self.scroll_top_button.setEnabled(self._mode != "editor" and self.list_widget.count() > 0)
+
+    def scroll_to_top(self) -> None:
+        """Reset the non-editor history list to its first record and scroll to the top."""
+        if self._mode == "editor":
+            return
+        if self.list_widget.count() > 0:
+            self.list_widget.setCurrentRow(0)
+            item = self.list_widget.item(0)
+            if item is not None:
+                self.list_widget.scrollToItem(item, QAbstractItemView.PositionAtTop)
+        v_bar = self.list_widget.verticalScrollBar()
+        if v_bar is not None:
+            v_bar.setValue(v_bar.minimum())
 
     def _cancel_pending_activations(self) -> None:
         self._activation_token += 1
@@ -453,6 +475,7 @@ class ClipboardWindow(QWidget):
         self._activation_timers.clear()
 
     def show_and_activate(self) -> None:
+        self.scroll_to_top()
         self._cancel_pending_activations()
         token = self._activation_token
 
@@ -738,11 +761,31 @@ class ClipboardWindow(QWidget):
         layout.addWidget(scroll)
         dialog.exec()
 
+    def is_pinned(self) -> bool:
+        return bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+
+    def set_pinned(self, pinned: bool) -> None:
+        pinned = bool(pinned)
+        if self.pin_window.isChecked() != pinned:
+            self.pin_window.blockSignals(True)
+            self.pin_window.setChecked(pinned)
+            self.pin_window.blockSignals(False)
+        self._apply_pinned_flag(pinned)
+
     def _toggle_window_pin(self, pinned: bool) -> None:
+        self._apply_pinned_flag(pinned)
+        self.pin_toggled.emit(pinned)
+
+    def _apply_pinned_flag(self, pinned: bool) -> None:
+        current_flag = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+        expected_text = "固定窗口" if pinned else "普通窗口"
+        if current_flag == pinned and self.pin_window.text() == expected_text:
+            return
         visible = self.isVisible()
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, pinned)
-        self.pin_window.setText("固定窗口" if pinned else "普通窗口")
-        if visible:
+        if current_flag != pinned:
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, pinned)
+        self.pin_window.setText(expected_text)
+        if visible and current_flag != pinned:
             self.show()
             self.raise_()
 

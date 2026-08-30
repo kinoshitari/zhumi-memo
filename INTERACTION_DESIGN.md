@@ -1,4 +1,4 @@
-# ZhumiMemo 4.3.7 Interaction System Design
+# ZhumiMemo 4.3.8 Interaction System Design
 
 This document details the interaction system implemented for ZhumiMemo 4.3.6, covering module transitions, window activation and foregrounding, hide-to-tray semantics, and rapid input interruption policies.
 

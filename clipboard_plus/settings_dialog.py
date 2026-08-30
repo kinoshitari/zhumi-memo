@@ -19,6 +19,7 @@ class SettingsDialog(QDialog):
         self, hotkey: str, history_limit: int, image_limit: int,
         file_cache_limit_mb: int, file_cache_extensions: str, storage_path: str, usage: dict,
         panel_transparency: int, autostart: bool, parent=None,
+        always_on_top: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("猪咪备忘录 - 设置")
@@ -62,6 +63,8 @@ class SettingsDialog(QDialog):
         storage_layout.setContentsMargins(0, 0, 0, 0)
         storage_layout.addWidget(self.storage_path, 1)
         storage_layout.addWidget(browse)
+        self.always_on_top = QCheckBox("呼出后保持窗口置顶", self)
+        self.always_on_top.setChecked(always_on_top)
         self.autostart = QCheckBox("登录 Windows 后自动启动", self)
         self.autostart.setChecked(autostart)
         form = QFormLayout()
@@ -83,6 +86,7 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        layout.addWidget(self.always_on_top)
         layout.addWidget(self.autostart)
         layout.addWidget(hint)
         layout.addWidget(buttons)
@@ -108,6 +112,7 @@ class SettingsDialog(QDialog):
             "panel_transparency": self.panel_transparency.value(),
             "storage_path": self.storage_path.text(),
             "autostart": self.autostart.isChecked(),
+            "always_on_top": self.always_on_top.isChecked(),
         })
 
     def _transparency_changed(self, value: int) -> None:

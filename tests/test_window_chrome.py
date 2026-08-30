@@ -105,6 +105,19 @@ class WindowChromeTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_watercolor_cache_renders_after_pink_stroke_removal(self):
+        window = ClipboardWindow()
+        try:
+            deck = window.content_deck
+            deck.resize(720, 480)
+            deck._render_watercolor_cache()
+            self.assertFalse(deck._watercolor_cache.isNull())
+            image = deck._watercolor_cache.toImage()
+            self.assertFalse(image.isNull())
+            self.assertEqual(image.size(), deck.size())
+        finally:
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -216,10 +216,17 @@ class RuntimeTests(unittest.TestCase):
         dialog.close()
 
     def test_window_pin_can_be_toggled(self):
-        self.controller.window.pin_window.setChecked(False)
         self.assertFalse(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+        self.assertEqual(self.controller.window.pin_window.text(), "普通窗口")
+        self.assertFalse(self.controller.window.pin_window.isChecked())
         self.controller.window.pin_window.setChecked(True)
         self.assertTrue(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+        self.assertEqual(self.controller.window.pin_window.text(), "固定窗口")
+        self.assertEqual(self.database.get_setting("always_on_top", ""), "true")
+        self.controller.window.pin_window.setChecked(False)
+        self.assertFalse(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+        self.assertEqual(self.controller.window.pin_window.text(), "普通窗口")
+        self.assertEqual(self.database.get_setting("always_on_top", ""), "false")
 
     def test_tray_click_hides_only_when_window_is_foreground(self):
         self.controller.window.show()
@@ -279,12 +286,14 @@ class RuntimeTests(unittest.TestCase):
         dialog = SettingsDialog(
             "Alt+V", 1000, 200, 2048, "*", str(Path(self.temp.name)),
             {"total": 0, "text": 0, "image": 0, "file": 0}, 42, False,
+            always_on_top=True,
         )
         try:
             self.assertEqual(dialog.image_limit.maximum(), 200)
             self.assertEqual(dialog.file_cache_limit.minimum(), 128)
             self.assertEqual(dialog.file_cache_limit.maximum(), 2048)
             self.assertEqual(dialog.file_cache_extensions.text(), "*")
+            self.assertTrue(dialog.always_on_top.isChecked())
             self.assertEqual(dialog.panel_transparency.minimum(), 0)
             self.assertEqual(dialog.panel_transparency.maximum(), 100)
             previews = []
@@ -295,9 +304,11 @@ class RuntimeTests(unittest.TestCase):
             received = []
             dialog.apply_requested.connect(received.append)
             dialog.file_cache_extensions.setText("pdf; DOCX")
+            dialog.always_on_top.setChecked(False)
             dialog._apply()
             self.assertEqual(received[0]["file_cache_extensions"], ".pdf, .docx")
             self.assertEqual(received[0]["panel_transparency"], 55)
+            self.assertFalse(received[0]["always_on_top"])
         finally:
             dialog.close()
 
@@ -411,6 +422,96 @@ class RuntimeTests(unittest.TestCase):
             self.app.processEvents()
             self.assertTrue(window.isVisible())
             self.assertFalse(window.isMinimized())
+
+    def test_always_on_top_restored_on_controller_init(self):
+        self.assertFalse(self.controller.window.is_pinned())
+        self.assertFalse(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+        self.database.set_setting("always_on_top", "true")
+        restored_controller = ClipboardController(self.app, self.database)
+        try:
+            self.assertTrue(restored_controller.window.is_pinned())
+            self.assertTrue(restored_controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+            self.assertTrue(restored_controller.window.pin_window.isChecked())
+            self.assertEqual(restored_controller.window.pin_window.text(), "固定窗口")
+        finally:
+            try:
+                restored_controller.clipboard.dataChanged.disconnect(restored_controller._clipboard_changed)
+            except RuntimeError:
+                pass
+            restored_controller.tray.hide()
+            restored_controller.window.close()
+
+    def test_apply_settings_updates_live_window_pin_and_persists_setting(self):
+        dialog = SettingsDialog(
+            "Alt+V", 1000, 200, 2048, "*", str(Path(self.temp.name)),
+            {"total": 0, "text": 0, "image": 0, "file": 0}, 42, False,
+            parent=self.controller.window, always_on_top=False,
+        )
+        try:
+            values = {
+                "hotkey": "Alt+V",
+                "history_limit": 1000,
+                "image_limit": 200,
+                "file_cache_limit_mb": 512,
+                "file_cache_extensions": "*",
+                "panel_transparency": 42,
+                "storage_path": str(self.database.path.parent),
+                "autostart": False,
+                "always_on_top": True,
+            }
+            self.controller._apply_settings(dialog, values)
+            self.assertTrue(self.controller.window.is_pinned())
+            self.assertTrue(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+            self.assertTrue(self.controller.window.pin_window.isChecked())
+            self.assertEqual(self.controller.window.pin_window.text(), "固定窗口")
+            self.assertEqual(self.database.get_setting("always_on_top", ""), "true")
+
+            values["always_on_top"] = False
+            self.controller._apply_settings(dialog, values)
+            self.assertFalse(self.controller.window.is_pinned())
+            self.assertFalse(self.controller.window.windowFlags() & Qt.WindowStaysOnTopHint)
+            self.assertFalse(self.controller.window.pin_window.isChecked())
+            self.assertEqual(self.controller.window.pin_window.text(), "普通窗口")
+            self.assertEqual(self.database.get_setting("always_on_top", ""), "false")
+        finally:
+            dialog.close()
+
+    def test_show_window_and_scroll_top_button_resets_history_list_and_scroll(self):
+        for i in range(40):
+            self.database.add_or_touch(f"history record {i}")
+        self.controller.refresh()
+        self.assertEqual(self.controller.window.list_widget.count(), 40)
+        self.assertTrue(self.controller.window.scroll_top_button.isEnabled())
+
+        self.controller.window.list_widget.setCurrentRow(35)
+        v_bar = self.controller.window.list_widget.verticalScrollBar()
+        v_bar.setValue(v_bar.maximum())
+        self.assertEqual(self.controller.window.list_widget.currentRow(), 35)
+
+        self.controller.window.scroll_top_button.click()
+        self.assertEqual(self.controller.window.list_widget.currentRow(), 0)
+        self.assertEqual(v_bar.value(), v_bar.minimum())
+
+        self.controller.window.list_widget.setCurrentRow(30)
+        v_bar.setValue(v_bar.maximum())
+        self.assertEqual(self.controller.window.list_widget.currentRow(), 30)
+
+        self.controller.show_window()
+        self.assertEqual(self.controller.window.list_widget.currentRow(), 0)
+        self.assertEqual(v_bar.value(), v_bar.minimum())
+
+    def test_scroll_top_button_disabled_in_editor_mode_and_empty_list(self):
+        self.assertEqual(self.controller.window.list_widget.count(), 0)
+        self.assertFalse(self.controller.window.scroll_top_button.isEnabled())
+        self.controller.window.scroll_to_top()
+
+        self.database.add_or_touch("test record")
+        self.controller.refresh()
+        self.assertTrue(self.controller.window.scroll_top_button.isEnabled())
+
+        self.controller.window.set_mode("editor")
+        self.assertFalse(self.controller.window.scroll_top_button.isEnabled())
+        self.controller.window.scroll_to_top()
 
 
 if __name__ == "__main__":

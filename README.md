@@ -2,7 +2,7 @@
 
 “猪咪备忘录”是一个本地运行的 Windows 文本、图片与文件剪贴板历史工具，使用 Python、PySide6 和 SQLite。项目由 ClipboardPlus V1 原位升级而来，继续兼容 V1 数据目录，因此已有历史会在数据库迁移后保留。
 
-应用图标已替换为项目 `assets/app_icon.png` 中的猫娘插画，并生成了适用于 Windows 与 Android 的多尺寸图标。
+应用图标已替换为项目 `assets/app_icon.png` 中的猫娘插画，并生成了适用于 Windows 的多尺寸图标。
 
 ## Windows 安装包
 
@@ -92,18 +92,4 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 代码按职责拆分在 `clipboard_plus` 包中，包括数据库迁移、分类、Windows 热键、来源识别、系统集成、设置界面和主窗口。
 
-平台无关的分类和移动端 SQLite 逻辑位于 `zhumi_core`，避免把 Windows API、托盘和全局快捷键耦合进安卓代码。
-
-## Android 原型
-
-`android_app` 中包含 PySide6 安卓前台原型、部署配置和 APK 构建脚本，支持文本/图片历史、搜索、去重、复制和 SQLite 本地持久化。
-
-Android 10 及以上版本限制普通后台应用读取剪贴板，因此安卓原型只能在应用获得焦点时监听，也提供手动“读取当前剪贴板”按钮。
-
-当前电脑已配置 Android Studio 与 Ubuntu 24.04 WSL 构建环境：Windows 侧用于编辑和连接真机，WSL 侧提供 Qt 所需的 Linux 构建主机、Android SDK/NDK、Python 3.11 虚拟环境和 aarch64 PySide6 wheels。双击 `android_app/open_android_wsl.bat` 打开构建终端，随后可运行下面的无副作用预检：
-
-```bash
-bash android_app/verify_wsl_environment.sh
-```
-
-此预检不会生成 APK。需要实际生成实体安卓手机（aarch64）安装包时，再在该终端显式运行 `bash android_app/build_apk.sh`。详细环境说明见 `android_app/README.md`。
+通用分类与核心 SQLite 逻辑位于 `zhumi_core`，与系统集成和界面展示逻辑解耦。

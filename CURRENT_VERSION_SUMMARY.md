@@ -81,4 +81,3 @@
 - Windows 安装包：`release/ZhumiMemo-Setup-4.3.8.exe`
 - 完整自动化测试：89 项通过。
 - 安装版已在本机覆盖安装并恢复运行。
-- 项目包含 Android 前台原型和构建环境说明，但当前正式交付仍以 Windows 安装版为主。

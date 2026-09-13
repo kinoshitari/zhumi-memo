@@ -8,8 +8,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QMimeData, Qt, QUrl
-from PySide6.QtGui import QColor, QImage, QKeyEvent
-from PySide6.QtWidgets import QApplication, QGraphicsView, QSystemTrayIcon
+from PySide6.QtGui import QColor, QImage, QKeyEvent, QTextDocument
+from PySide6.QtWidgets import QApplication, QGraphicsView, QSystemTrayIcon, QTextEdit
 
 from clipboard_plus.application import ClipboardController
 from clipboard_plus.database import HistoryDatabase
@@ -71,6 +71,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(mime.hasText())
         self.assertEqual(mime.text(), "编辑台混合内容")
         self.assertTrue(mime.hasImage())
+        self._assert_rich_paste("编辑台混合内容", image)
         self.assertEqual(self.database.count("text"), 0)
         self.assertEqual(self.database.count("image"), 0)
 
@@ -367,15 +368,45 @@ class RuntimeTests(unittest.TestCase):
         image.fill(QColor("magenta"))
         image_data = _image_png(image)
         record_id = self.database.add_or_touch_image(image_data, image_data)
-        self.database.set_note(record_id, "图片备注", "image")
+        note = '图片备注 <b>原样</b> & "引号"\n第二行'
+        self.database.set_note(record_id, note, "image")
 
         self.controller.handle_action("copy_note_with_content", record_id, "image")
         self.app.processEvents()
         mime = self.controller.clipboard.mimeData()
         self.assertTrue(mime.hasText())
-        self.assertEqual(mime.text(), "图片备注")
+        self.assertEqual(mime.text(), note)
         self.assertTrue(mime.hasImage())
+        self._assert_rich_paste(note, image)
         self.assertEqual(self.database.count("image"), 1)
+        self.assertEqual(self.database.count("text"), 0)
+
+    def _assert_rich_paste(self, text, expected_image):
+        self.assertTrue(self.controller.clipboard.mimeData().hasHtml())
+        target = QTextEdit()
+        try:
+            target.paste()
+            self.assertIn(text, target.toPlainText())
+            doc = target.document()
+            images = []
+            block = doc.begin()
+            while block.isValid():
+                it = block.begin()
+                while not it.atEnd():
+                    fmt = it.fragment().charFormat()
+                    if fmt.isImageFormat():
+                        images.append(fmt.toImageFormat().name())
+                    it += 1
+                block = block.next()
+            self.assertEqual(len(images), 1)
+            decoded = doc.resource(QTextDocument.ImageResource, QUrl(images[0]))
+            self.assertIsNotNone(decoded)
+            actual = decoded.toImage() if hasattr(decoded, 'toImage') else decoded
+            self.assertFalse(actual.isNull())
+            self.assertEqual(actual.size(), expected_image.size())
+            self.assertEqual(actual.pixelColor(0, 0), expected_image.pixelColor(0, 0))
+        finally:
+            target.close()
 
     def test_delayed_activation_timers_cancelled_on_hide(self):
         window = self.controller.window

@@ -20,6 +20,7 @@ from .file_types import (
 )
 from .image_preview import ImagePreviewDialog
 from .settings_dialog import SettingsDialog
+from .rich_clipboard import image_text_mime
 from .source_app import clipboard_source_app
 from .system_integration import is_autostart_enabled, set_autostart
 from .window import ClipboardWindow
@@ -261,9 +262,7 @@ class ClipboardController(QObject):
         image = QImage()
         if not note or not image.loadFromData(image_data):
             return False
-        mime = QMimeData()
-        mime.setText(note)
-        mime.setImageData(image)
+        mime = image_text_mime(note, image, _image_png(image))
         self._ignore_next_clipboard_change()
         self.clipboard.setMimeData(mime)
         return True
@@ -278,11 +277,14 @@ class ClipboardController(QObject):
         has_image = image is not None and not image.isNull()
         if not text and not has_image:
             return
-        mime = QMimeData()
-        if text:
-            mime.setText(text)
-        if has_image:
-            mime.setImageData(QImage(image))
+        if text and has_image:
+            mime = image_text_mime(text, image, _image_png(image))
+        else:
+            mime = QMimeData()
+            if text:
+                mime.setText(text)
+            if has_image:
+                mime.setImageData(QImage(image))
         self._ignore_next_clipboard_change()
         self.clipboard.setMimeData(mime)
 
